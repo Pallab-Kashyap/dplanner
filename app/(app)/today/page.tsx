@@ -82,19 +82,6 @@ export default function TodayPage() {
   const accountStartDateRef = useRef<string | null>(null);
   accountStartDateRef.current = accountStartDate;
 
-  // Fetch user account start
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/me");
-        if (res.ok) {
-          const data = await res.json();
-          if (data.success) setAccountStartDate(data.data.createdAt);
-        }
-      } catch {}
-    })();
-  }, []);
-
   const fetchDays = useCallback(async (beforeDate?: string) => {
     const startDate = beforeDate || dateParam || getTodayStr();
     const params = new URLSearchParams({ limit: dateParam && !beforeDate ? "1" : "7", before: startDate });
@@ -110,16 +97,53 @@ export default function TodayPage() {
     return { days: [], allCategories: [] };
   }, [dateParam]);
 
-  // Initial load
+  // Helper: fetch days and filter by account start date
+  const refreshDays = useCallback(async () => {
+    const result = await fetchDays();
+    let filtered = result.days;
+    const start = accountStartDateRef.current;
+    if (start) {
+      filtered = filtered.filter((d: DayData) => d.date >= start);
+    }
+    setDays(filtered);
+    setAllCategories(result.allCategories);
+    if (start && filtered.length < result.days.length) setHasMore(false);
+  }, [fetchDays]);
+
+  // Initial load — fetch account date first, then days (so we can filter from join date)
   useEffect(() => {
     (async () => {
       setLoading(true);
       setDays([]);
       setHasMore(true);
+
+      // Fetch account start date first
+      let startDate: string | null = null;
+      try {
+        const meRes = await fetch("/api/me");
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          if (meData.success && meData.data.createdAt) {
+            // Convert ISO timestamp to local date (avoids UTC timezone offset bug)
+            const d = new Date(meData.data.createdAt);
+            startDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            setAccountStartDate(startDate);
+          }
+        }
+      } catch {}
+
       const result = await fetchDays();
-      setDays(result.days);
+      let filteredDays = result.days;
+
+      // Filter: only show days >= account creation date
+      if (startDate) {
+        filteredDays = filteredDays.filter((d: DayData) => d.date >= startDate!);
+        if (filteredDays.length < result.days.length) setHasMore(false);
+      }
+
+      setDays(filteredDays);
       setAllCategories(result.allCategories);
-      if (result.days.length < 7) setHasMore(!dateParam);
+      if (filteredDays.length < 7 && startDate) setHasMore(false);
       setLoading(false);
     })();
   }, [fetchDays, dateParam]);
@@ -238,25 +262,21 @@ export default function TodayPage() {
       const res = await fetch("/api/timetable/overrides", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date, slots }) });
       if (!res.ok) throw new Error("Failed to save override");
     }
-    const result = await fetchDays();
-    setDays(result.days);
+    await refreshDays();
     setTimetableEditor(null);
   };
 
   // ===== Add Column =====
   const handleAddColumn = async (name: string, color: string, scope: string, weekdays: number[], specificDate: string | null) => {
-    const order = allCategories.length;
     const res = await fetch("/api/todo-categories", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, color, order, scope, weekdays, specificDate }),
+      body: JSON.stringify({ name, color, scope, weekdays, specificDate }),
     });
     if (!res.ok) throw new Error("Failed");
     const result = await res.json();
     if (result.success) {
       setAllCategories((prev) => [...prev, result.data]);
-      // Refresh days to get updated per-day categories
-      const daysResult = await fetchDays();
-      setDays(daysResult.days);
+      await refreshDays();
     }
   };
 
@@ -265,8 +285,7 @@ export default function TodayPage() {
     const res = await fetch(`/api/todo-categories/${id}`, { method: "DELETE" });
     if (!res.ok) throw new Error("Failed");
     setAllCategories((prev) => prev.filter((c) => c._id !== id));
-    const daysResult = await fetchDays();
-    setDays(daysResult.days);
+    await refreshDays();
     // Update modal's list too
     setAddColumnModal((prev) => prev ? { ...prev, categories: prev.categories.filter((c) => c._id !== id) } : null);
   };

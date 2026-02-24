@@ -35,11 +35,11 @@ export async function GET(req: NextRequest) {
 
     // Batch: 5 parallel queries for entire range
     const [allCategories, templates, overrides, todos, dailyLogs] = await Promise.all([
-      TodoCategory.find({ userId }).sort({ order: 1 }),
-      TimetableTemplate.find({ userId }).populate("slots.tags"),
+      TodoCategory.find({ userId }).sort({ order: 1 }).lean(),
+      TimetableTemplate.find({ userId }).populate("slots.tags").lean(),
       TimetableOverride.find({ userId, date: { $gte: startDate, $lt: endDate } }).populate("slots.tags"),
       Todo.find({ userId, date: { $gte: startDate, $lt: endDate } }).populate("category").populate("tags").sort({ order: 1 }),
-      DailyLog.find({ userId, date: { $gte: startDate, $lt: endDate } }),
+      DailyLog.find({ userId, date: { $gte: startDate, $lt: endDate } }).lean(),
     ]);
 
     // Seed defaults if needed

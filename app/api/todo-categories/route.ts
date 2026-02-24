@@ -62,8 +62,19 @@ export async function POST(req: NextRequest) {
 
     let assignedOrder = order;
     if (assignedOrder === undefined) {
-      const max = await TodoCategory.findOne({ userId }).sort({ order: -1 });
-      assignedOrder = max ? max.order + 1 : 0;
+      // Insert before "Completed" — find its order and bump it (and anything after) up
+      const completedCat = await TodoCategory.findOne({ userId, isDefault: true, name: "Completed" });
+      if (completedCat) {
+        assignedOrder = completedCat.order;
+        // Shift Completed and any categories after it up by 1
+        await TodoCategory.updateMany(
+          { userId, order: { $gte: assignedOrder } },
+          { $inc: { order: 1 } }
+        );
+      } else {
+        const max = await TodoCategory.findOne({ userId }).sort({ order: -1 });
+        assignedOrder = max ? max.order + 1 : 0;
+      }
     }
 
     const category = await TodoCategory.create({

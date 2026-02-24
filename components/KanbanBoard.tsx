@@ -151,34 +151,15 @@ export default function KanbanBoard({
         </div>
       ))}
 
-      {/* Inline add column — simple + icon */}
+      {/* Inline add column — slim column placeholder */}
       {onAddColumn && (
-        <div style={{ display: "flex", alignItems: "flex-start", paddingTop: "0.4rem" }}>
-          <button
-            onClick={onAddColumn}
-            title="Add column"
-            style={{
-              width: 36,
-              height: 36,
-              background: "none",
-              border: "2px dashed var(--border-sketch)",
-              borderRadius: "50%",
-              cursor: "pointer",
-              color: "var(--text-muted)",
-              fontFamily: "var(--font-hand)",
-              fontSize: "1.4rem",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              transition: "all 0.15s ease",
-              flexShrink: 0,
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-light)"; e.currentTarget.style.borderColor = "var(--accent)"; e.currentTarget.style.color = "var(--text)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.borderColor = "var(--border-sketch)"; e.currentTarget.style.color = "var(--text-muted)"; }}
-          >
-            +
-          </button>
-        </div>
+        <button
+          onClick={onAddColumn}
+          title="Add column"
+          className="kanban-add-column"
+        >
+          <span style={{ fontSize: "1.3rem" }}>+</span>
+        </button>
       )}
     </div>
   );

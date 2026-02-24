@@ -18,10 +18,25 @@ export default function ContributeModal({ onClose }: ContributeModalProps) {
   const [suggestion, setSuggestion] = useState("");
   const [selectedEmoji, setSelectedEmoji] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = () => {
-    setSubmitted(true);
-    setTimeout(onClose, 1500);
+  const handleSubmit = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ suggestion: suggestion.trim(), rating: selectedEmoji }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      setSubmitted(true);
+      setTimeout(onClose, 1500);
+    } catch {
+      setError("Failed to send. Please try again.");
+      setSaving(false);
+    }
   };
 
   if (submitted) {
@@ -47,7 +62,7 @@ export default function ContributeModal({ onClose }: ContributeModalProps) {
         <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
           <textarea
             className="sketchy-textarea"
-            placeholder="Suggest a feature..."
+            placeholder="Suggest a feature, report a bug, or ask a question..."
             value={suggestion}
             onChange={(e) => setSuggestion(e.target.value)}
             style={{ minHeight: 80 }}
@@ -81,15 +96,17 @@ export default function ContributeModal({ onClose }: ContributeModalProps) {
             </div>
           </div>
 
+          {error && <p style={{ color: "var(--failed)", margin: 0, fontSize: "0.9rem" }}>{error}</p>}
+
           <div style={{ display: "flex", gap: "0.4rem", justifyContent: "flex-end" }}>
-            <button className="sketchy-btn sketchy-btn-outline" onClick={onClose} style={{ padding: "0.3rem 0.8rem", fontSize: "1.1rem" }}>Cancel</button>
+            <button className="sketchy-btn sketchy-btn-outline" onClick={onClose} disabled={saving} style={{ padding: "0.3rem 0.8rem", fontSize: "1.1rem" }}>Cancel</button>
             <button
               className="sketchy-btn"
               onClick={handleSubmit}
-              disabled={!suggestion.trim() && selectedEmoji === null}
-              style={{ opacity: (!suggestion.trim() && selectedEmoji === null) ? 0.5 : 1, padding: "0.3rem 0.8rem", fontSize: "1.1rem" }}
+              disabled={saving || (!suggestion.trim() && selectedEmoji === null)}
+              style={{ opacity: (saving || (!suggestion.trim() && selectedEmoji === null)) ? 0.5 : 1, padding: "0.3rem 0.8rem", fontSize: "1.1rem" }}
             >
-              Send 💌
+              {saving ? "Sending..." : "Send 💌"}
             </button>
           </div>
         </div>

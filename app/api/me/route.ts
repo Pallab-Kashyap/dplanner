@@ -14,7 +14,7 @@ export async function GET(_req: NextRequest) {
     await dbConnect();
     // Extract createdAt from ObjectId timestamp (works even if document lacks createdAt)
     const objectId = new mongoose.Types.ObjectId(authResult.userId);
-    const createdFromId = objectId.getTimestamp().toISOString().split("T")[0];
+    const createdFromId = objectId.getTimestamp().toISOString();
 
     const user = await User.findById(objectId).select("name email image createdAt");
     if (!user) {
@@ -31,7 +31,7 @@ export async function GET(_req: NextRequest) {
       email: user.email,
       image: user.image,
       createdAt: user.createdAt
-        ? user.createdAt.toISOString().split("T")[0]
+        ? user.createdAt.toISOString()
         : createdFromId,
     });
   } catch (error: unknown) {
