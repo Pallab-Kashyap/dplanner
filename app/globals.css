@@ -362,7 +362,7 @@ a:hover {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 4px;
-  max-width: 780px;
+  max-width: 1010px;
   margin: 0 auto;
   padding: 6px;
 }
