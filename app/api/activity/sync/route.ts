@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     const dailyLog = await DailyLog.findOneAndUpdate(
       { userId, date: { $gte: date, $lt: nextDay } },
       { userId, date, totalTasks, completedTasks, partialTasks, failedTasks, completionRate },
-      { new: true, upsert: true }
+      { returnDocument: "after", upsert: true }
     );
 
     return successResponse(dailyLog);

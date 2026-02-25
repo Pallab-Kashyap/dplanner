@@ -27,7 +27,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
 
     const todo = await Todo.findOneAndUpdate({ _id: id, userId }, updateData, {
-      new: true,
+      returnDocument: "after",
       runValidators: true,
     })
       .populate("category")

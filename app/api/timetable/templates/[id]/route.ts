@@ -18,7 +18,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     const body = await req.json();
 
     const template = await TimetableTemplate.findOneAndUpdate({ _id: id, userId }, body, {
-      new: true,
+      returnDocument: "after",
       runValidators: true,
     }).populate("slots.tags");
     if (!template) return errorResponse("Template not found", 404);

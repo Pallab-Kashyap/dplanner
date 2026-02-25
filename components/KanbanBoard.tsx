@@ -34,6 +34,7 @@ interface KanbanBoardProps {
   onStatusChange?: (todoId: string, status: string) => void;
   onMoveTodo?: (todoId: string, categoryId: string, autoStatus?: string) => void;
   onAddTodo?: (categoryId: string) => void;
+  onEditTodo?: (todo: TodoItem) => void;
   onAddColumn?: () => void;
 }
 
@@ -43,6 +44,7 @@ export default function KanbanBoard({
   onStatusChange,
   onMoveTodo,
   onAddTodo,
+  onEditTodo,
   onAddColumn,
 }: KanbanBoardProps) {
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
@@ -108,7 +110,24 @@ export default function KanbanBoard({
                     size="sm"
                     onChange={(newStatus) => onStatusChange?.(todo._id, newStatus)}
                   />
-                  <span className="card-title">{todo.title}</span>
+                  <span
+                    className="card-title"
+                    style={{ flex: 1, cursor: onEditTodo ? "pointer" : "default" }}
+                    onClick={() => onEditTodo?.(todo)}
+                  >
+                    {todo.title}
+                  </span>
+                  {onEditTodo && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onEditTodo(todo); }}
+                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.8rem", color: "var(--text-muted)", padding: "0.1rem", opacity: 0.5, transition: "opacity 0.15s" }}
+                      onMouseEnter={(e) => e.currentTarget.style.opacity = "1"}
+                      onMouseLeave={(e) => e.currentTarget.style.opacity = "0.5"}
+                      title="Edit task"
+                    >
+                      ✏️
+                    </button>
+                  )}
                 </div>
 
                 {todo.statusNote && (

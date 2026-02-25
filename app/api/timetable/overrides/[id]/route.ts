@@ -18,7 +18,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     const body = await req.json();
 
     const override = await TimetableOverride.findOneAndUpdate({ _id: id, userId }, body, {
-      new: true,
+      returnDocument: "after",
       runValidators: true,
     }).populate("slots.tags");
     if (!override) return errorResponse("Override not found", 404);

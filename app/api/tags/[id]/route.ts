@@ -16,8 +16,13 @@ export async function PUT(req: NextRequest, { params }: Params) {
     await dbConnect();
     const { id } = await params;
     const body = await req.json();
+    const allowed: Record<string, unknown> = {};
+    if (body.name !== undefined) allowed.name = String(body.name).trim();
+    if (body.color !== undefined) allowed.color = String(body.color);
 
-    const tag = await Tag.findOneAndUpdate({ _id: id, userId }, body, { new: true, runValidators: true });
+    if (Object.keys(allowed).length === 0) return errorResponse("No valid fields", 400);
+
+    const tag = await Tag.findOneAndUpdate({ _id: id, userId }, allowed, { returnDocument: "after", runValidators: true });
     if (!tag) return errorResponse("Tag not found", 404);
     return successResponse(tag);
   } catch (error: unknown) {

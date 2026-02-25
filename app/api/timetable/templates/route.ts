@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     const template = await TimetableTemplate.findOneAndUpdate(
       { userId, dayOfWeek },
       { userId, dayOfWeek, slots },
-      { new: true, upsert: true, runValidators: true }
+      { returnDocument: "after", upsert: true, runValidators: true }
     ).populate("slots.tags");
 
     return successResponse(template, 201);

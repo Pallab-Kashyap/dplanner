@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       const result = await TimetableTemplate.findOneAndUpdate(
         { userId, dayOfWeek: toDayOfWeek },
         { userId, dayOfWeek: toDayOfWeek, slots: slotsClone },
-        { new: true, upsert: true, runValidators: true }
+        { returnDocument: "after", upsert: true, runValidators: true }
       ).populate("slots.tags");
 
       return successResponse({ source: "template", clonedTo: result });
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       const result = await TimetableOverride.findOneAndUpdate(
         { userId, date: { $gte: toDateObj, $lt: new Date(toDateObj.getTime() + 86400000) } },
         { userId, date: toDateObj, slots: slotsClone },
-        { new: true, upsert: true, runValidators: true }
+        { returnDocument: "after", upsert: true, runValidators: true }
       ).populate("slots.tags");
 
       return successResponse({ source: "date", clonedTo: result });

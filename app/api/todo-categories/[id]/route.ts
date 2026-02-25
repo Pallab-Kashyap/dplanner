@@ -39,7 +39,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     }
 
     const category = await TodoCategory.findOneAndUpdate({ _id: id, userId }, allowed, {
-      new: true,
+      returnDocument: "after",
       runValidators: true,
     });
     if (!category) return errorResponse("Category not found", 404);

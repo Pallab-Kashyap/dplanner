@@ -40,7 +40,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     }
 
     const todo = await Todo.findOneAndUpdate({ _id: id, userId }, body, {
-      new: true,
+      returnDocument: "after",
       runValidators: true,
     })
       .populate("category")

@@ -8,6 +8,7 @@ import AddTodoModal from "@/components/AddTodoModal";
 import TimetableEditor from "@/components/TimetableEditor";
 import AddColumnModal from "@/components/AddColumnModal";
 import ContributeModal from "@/components/ContributeModal";
+import TagManager from "@/components/TagManager";
 
 interface Tag { _id: string; name: string; color: string; }
 
@@ -72,6 +73,8 @@ export default function TodayPage() {
   const [timetableEditor, setTimetableEditor] = useState<{ date: string; dayOfWeek: number; slots: TimeSlot[] } | null>(null);
   const [addColumnModal, setAddColumnModal] = useState<{ date: string; dayOfWeek: number; categories: Category[] } | null>(null);
   const [showContribute, setShowContribute] = useState(false);
+  const [showTagManager, setShowTagManager] = useState(false);
+  const [editModal, setEditModal] = useState<{ todo: TodoItem; categoryId: string; categoryName: string; date: string } | null>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const daysRef = useRef<DayData[]>([]);
   daysRef.current = days;
@@ -233,7 +236,7 @@ export default function TodayPage() {
     } catch { setDays(oldDays); }
   };
 
-  const handleAddTodo = async (data: { title: string; description: string; category: string; date: string }) => {
+  const handleAddTodo = async (data: { title: string; description: string; category: string; date: string; tags: string[] }) => {
     try {
       const res = await fetch("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
       if (!res.ok) return;
@@ -241,6 +244,35 @@ export default function TodayPage() {
       if (result.success) {
         setDays((prev) => prev.map((day) => day.date === data.date ? { ...day, todos: [...day.todos, result.data] } : day));
       }
+    } catch {}
+  };
+
+  // ===== Edit Todo =====
+  const handleEditTodo = async (todoId: string, data: { title: string; description: string; tags: string[] }) => {
+    try {
+      const res = await fetch(`/api/todos/${todoId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) return;
+      const result = await res.json();
+      if (result.success) {
+        setDays((prev) => prev.map((day) => ({
+          ...day, todos: day.todos.map((t) => t._id === todoId ? result.data : t),
+        })));
+      }
+    } catch {}
+  };
+
+  // ===== Delete Todo =====
+  const handleDeleteTodo = async (todoId: string) => {
+    try {
+      const res = await fetch(`/api/todos/${todoId}`, { method: "DELETE" });
+      if (!res.ok) return;
+      setDays((prev) => prev.map((day) => ({
+        ...day, todos: day.todos.filter((t) => t._id !== todoId),
+      })));
     } catch {}
   };
 
@@ -311,6 +343,14 @@ export default function TodayPage() {
           </a>
         )}
         <button
+          onClick={() => setShowTagManager(true)}
+          style={{ background: "none", border: "2px solid var(--border-sketch)", borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px", padding: "0.3rem 0.8rem", cursor: "pointer", fontFamily: "var(--font-hand)", fontSize: "1.1rem", color: "var(--text)", transition: "all 0.15s ease" }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-light)"; e.currentTarget.style.transform = "rotate(-1deg)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.transform = "none"; }}
+        >
+          🏷️ Tags
+        </button>
+        <button
           onClick={() => setShowContribute(true)}
           style={{ background: "none", border: "2px solid var(--border-sketch)", borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px", padding: "0.3rem 0.8rem", cursor: "pointer", fontFamily: "var(--font-hand)", fontSize: "1.1rem", color: "var(--text)", transition: "all 0.15s ease" }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-light)"; e.currentTarget.style.transform = "rotate(-1deg)"; }}
@@ -358,6 +398,10 @@ export default function TodayPage() {
               const cat = day.categories.find((c) => c._id === categoryId);
               setAddModal({ categoryId, categoryName: cat?.name || "", date: day.date });
             }}
+            onEditTodo={(todo) => {
+              const cat = day.categories.find((c) => c._id === todo.category._id);
+              setEditModal({ todo, categoryId: todo.category._id, categoryName: cat?.name || "", date: day.date });
+            }}
             onAddColumn={() => setAddColumnModal({ date: day.date, dayOfWeek: day.dayOfWeek, categories: day.categories })}
           />
         </div>
@@ -377,6 +421,17 @@ export default function TodayPage() {
 
       {addModal && (
         <AddTodoModal categoryId={addModal.categoryId} categoryName={addModal.categoryName} date={addModal.date} onClose={() => setAddModal(null)} onAdd={handleAddTodo} />
+      )}
+
+      {editModal && (
+        <AddTodoModal
+          categoryId={editModal.categoryId} categoryName={editModal.categoryName} date={editModal.date}
+          editTodo={editModal.todo}
+          onClose={() => setEditModal(null)}
+          onAdd={handleAddTodo}
+          onEdit={handleEditTodo}
+          onDelete={handleDeleteTodo}
+        />
       )}
 
       {timetableEditor && (
@@ -399,6 +454,7 @@ export default function TodayPage() {
       )}
 
       {showContribute && <ContributeModal onClose={() => setShowContribute(false)} />}
+      {showTagManager && <TagManager onClose={() => setShowTagManager(false)} />}
     </div>
   );
 }

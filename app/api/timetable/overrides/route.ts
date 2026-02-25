@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     const override = await TimetableOverride.findOneAndUpdate(
       { userId, date: { $gte: dateObj, $lt: new Date(dateObj.getTime() + 86400000) } },
       { userId, date: dateObj, slots },
-      { new: true, upsert: true, runValidators: true }
+      { returnDocument: "after", upsert: true, runValidators: true }
     ).populate("slots.tags");
 
     return successResponse(override, 201);
