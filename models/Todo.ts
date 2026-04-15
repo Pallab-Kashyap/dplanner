@@ -10,6 +10,7 @@ export interface ITodo extends Document {
   status: TodoStatus;
   statusNote: string;
   tags: Types.ObjectId[];
+  templateId: string | null;
   date: Date;
   order: number;
   createdAt: Date;
@@ -29,6 +30,7 @@ const TodoSchema = new Schema<ITodo>(
     },
     statusNote: { type: String, default: "" },
     tags: [{ type: Schema.Types.ObjectId, ref: "Tag" }],
+    templateId: { type: String, default: null },
     date: { type: Date, required: true },
     order: { type: Number, default: 0 },
   },

@@ -24,6 +24,8 @@ interface TodoItem {
   statusNote: string; tags: Tag[];
   category: { _id: string; name: string; color: string };
   order: number;
+  templateId?: string;
+  _template?: boolean;
 }
 
 interface Category {
@@ -59,6 +61,13 @@ function getTodayStr() {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 }
 
+interface SchedulePresetOption {
+  _id: string;
+  name: string;
+  scope: "everyday" | "custom";
+  slots: { startTime: string; endTime: string; title: string; description: string }[];
+}
+
 export default function TodayPage() {
   const searchParams = useSearchParams();
   const dateParam = searchParams.get("date");
@@ -69,12 +78,13 @@ export default function TodayPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [accountStartDate, setAccountStartDate] = useState<string | null>(null);
-  const [addModal, setAddModal] = useState<{ categoryId: string; categoryName: string; date: string } | null>(null);
+  const [addModal, setAddModal] = useState<{ categoryId: string; categoryName: string; date: string; dayOfWeek: number } | null>(null);
   const [timetableEditor, setTimetableEditor] = useState<{ date: string; dayOfWeek: number; slots: TimeSlot[] } | null>(null);
   const [addColumnModal, setAddColumnModal] = useState<{ date: string; dayOfWeek: number; categories: Category[] } | null>(null);
   const [showContribute, setShowContribute] = useState(false);
   const [showTagManager, setShowTagManager] = useState(false);
   const [editModal, setEditModal] = useState<{ todo: TodoItem; categoryId: string; categoryName: string; date: string } | null>(null);
+  const [schedulePresets, setSchedulePresets] = useState<SchedulePresetOption[]>([]);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const daysRef = useRef<DayData[]>([]);
   daysRef.current = days;
@@ -135,6 +145,14 @@ export default function TodayPage() {
         }
       } catch {}
 
+      // Fetch schedule presets for TimetableEditor selector
+      fetch("/api/schedule-presets").then(async (r) => {
+        if (r.ok) {
+          const d = await r.json();
+          if (d.success) setSchedulePresets(d.data.map((p: Record<string, unknown>) => ({ _id: p._id, name: p.name, scope: p.scope, slots: p.slots })));
+        }
+      }).catch(() => {});
+
       const result = await fetchDays();
       let filteredDays = result.days;
 
@@ -189,8 +207,62 @@ export default function TodayPage() {
     return () => observer.disconnect();
   }, [fetchDays]); // Only depends on fetchDays (stable via useCallback)
 
+  // ===== Helper: materialize a virtual template todo into a real todo =====
+  const materializeTemplateTodo = async (todo: TodoItem, date: string): Promise<TodoItem | null> => {
+    try {
+      const res = await fetch("/api/todos", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: todo.title, description: todo.description,
+          category: todo.category._id, date, tags: todo.tags.map((t) => t._id),
+          templateId: todo.templateId,
+        }),
+      });
+      if (!res.ok) return null;
+      const result = await res.json();
+      return result.success ? result.data : null;
+    } catch { return null; }
+  };
+
   // ===== OPTIMISTIC: Status change =====
   const handleTodoStatusChange = async (todoId: string, newStatus: string) => {
+    // Check if this is a virtual template todo
+    const isVirtual = todoId.startsWith("tmpl_");
+    if (isVirtual) {
+      // Find the virtual todo and its date
+      let virtualTodo: TodoItem | null = null;
+      let todoDate = "";
+      for (const day of days) {
+        const found = day.todos.find((t) => t._id === todoId);
+        if (found) { virtualTodo = found; todoDate = day.date; break; }
+      }
+      if (!virtualTodo || !todoDate) return;
+
+      // Optimistic update
+      const oldDays = days;
+      setDays((prev) => prev.map((day) => ({
+        ...day, todos: day.todos.map((t) => t._id === todoId ? { ...t, status: newStatus as TodoItem["status"] } : t),
+      })));
+
+      // Materialize and update status
+      const realTodo = await materializeTemplateTodo(virtualTodo, todoDate);
+      if (!realTodo) { setDays(oldDays); return; }
+
+      const statusRes = await fetch(`/api/todos/${realTodo._id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!statusRes.ok) { setDays(oldDays); return; }
+      const statusResult = await statusRes.json();
+      if (statusResult.success) {
+        // Replace virtual todo with real one
+        setDays((prev) => prev.map((day) => day.date === todoDate ? {
+          ...day, todos: day.todos.map((t) => t._id === todoId ? statusResult.data : t),
+        } : day));
+      }
+      return;
+    }
+
     const oldDays = days;
     setDays((prev) => prev.map((day) => ({
       ...day, todos: day.todos.map((t) => t._id === todoId ? { ...t, status: newStatus as TodoItem["status"] } : t),
@@ -218,6 +290,7 @@ export default function TodayPage() {
     const targetCat = allCategories.find((c) => c._id === categoryId);
     if (!targetCat) return;
     const oldDays = days;
+    const isVirtual = todoId.startsWith("tmpl_");
 
     setDays((prev) => prev.map((day) => ({
       ...day, todos: day.todos.map((t) =>
@@ -226,6 +299,30 @@ export default function TodayPage() {
           : t
       ),
     })));
+
+    if (isVirtual) {
+      // Find virtual todo and materialize it first
+      let virtualTodo: TodoItem | null = null;
+      let todoDate = "";
+      for (const day of days) {
+        const found = day.todos.find((t) => t._id === todoId);
+        if (found) { virtualTodo = found; todoDate = day.date; break; }
+      }
+      if (!virtualTodo || !todoDate) { setDays(oldDays); return; }
+
+      const realTodo = await materializeTemplateTodo(virtualTodo, todoDate);
+      if (!realTodo) { setDays(oldDays); return; }
+
+      try {
+        const body: Record<string, string> = { categoryId };
+        if (autoStatus) body.status = autoStatus;
+        const res = await fetch(`/api/todos/${realTodo._id}/move`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (!res.ok) throw new Error();
+        // Refresh to get clean state
+        await refreshDays();
+      } catch { setDays(oldDays); }
+      return;
+    }
 
     try {
       // Single atomic API call for move + status
@@ -236,19 +333,76 @@ export default function TodayPage() {
     } catch { setDays(oldDays); }
   };
 
-  const handleAddTodo = async (data: { title: string; description: string; category: string; date: string; tags: string[] }) => {
+  const handleAddTodo = async (data: { title: string; description: string; category: string; date: string; tags: string[]; scope?: string; weekdays?: number[] }) => {
     try {
-      const res = await fetch("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
-      if (!res.ok) return;
-      const result = await res.json();
-      if (result.success) {
-        setDays((prev) => prev.map((day) => day.date === data.date ? { ...day, todos: [...day.todos, result.data] } : day));
+      if (data.scope === "everyday" || data.scope === "custom") {
+        // Add item to the active todo preset of this scope, or create a new one
+        const presetsRes = await fetch("/api/todo-presets");
+        if (!presetsRes.ok) return;
+        const presetsData = await presetsRes.json();
+        const activePreset = presetsData.success && presetsData.data.find((p: { scope: string; isActive: boolean }) => p.scope === data.scope && p.isActive);
+
+        if (activePreset) {
+          // Add item to existing active preset
+          const newItem = { title: data.title, description: data.description, category: data.category, tags: data.tags, order: activePreset.items.length };
+          const res = await fetch(`/api/todo-presets/${activePreset._id}`, {
+            method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items: [...activePreset.items.map((i: { title: string; description: string; category: { _id: string } | string; tags: ({ _id: string } | string)[]; order: number }) => ({ title: i.title, description: i.description, category: typeof i.category === "object" ? i.category._id : i.category, tags: i.tags.map((t: { _id: string } | string) => typeof t === "object" ? t._id : t), order: i.order })), newItem] }),
+          });
+          if (!res.ok) return;
+        } else {
+          // Create a new preset with this single item
+          const weekdays = data.scope === "everyday" ? [0, 1, 2, 3, 4, 5, 6] : (data.weekdays || []);
+          const res = await fetch("/api/todo-presets", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: `${data.scope} todos`, scope: data.scope, weekdays, items: [{ title: data.title, description: data.description, category: data.category, tags: data.tags, order: 0 }] }),
+          });
+          if (!res.ok) return;
+        }
+        await refreshDays();
+      } else {
+        // Regular single-day todo
+        const res = await fetch("/api/todos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+        if (!res.ok) return;
+        const result = await res.json();
+        if (result.success) {
+          setDays((prev) => prev.map((day) => day.date === data.date ? { ...day, todos: [...day.todos, result.data] } : day));
+        }
       }
     } catch {}
   };
 
   // ===== Edit Todo =====
   const handleEditTodo = async (todoId: string, data: { title: string; description: string; tags: string[] }) => {
+    const isVirtual = todoId.startsWith("tmpl_");
+    if (isVirtual) {
+      // Virtual ID format: tmpl_{presetId}_{itemId}_{dateStr}
+      const parts = todoId.split("_");
+      // parts: ["tmpl", presetId, itemId, dateStr]
+      const presetId = parts[1];
+      const itemId = parts[2];
+      try {
+        // Fetch the preset, update the matching item
+        const presetRes = await fetch(`/api/todo-presets`);
+        if (!presetRes.ok) return;
+        const presetData = await presetRes.json();
+        const preset = presetData.success && presetData.data.find((p: { _id: string }) => p._id === presetId);
+        if (!preset) return;
+
+        const updatedItems = preset.items.map((item: { _id: string; title: string; description: string; category: { _id: string } | string; tags: ({ _id: string } | string)[]; order: number }) => {
+          const raw = { title: item.title, description: item.description, category: typeof item.category === "object" ? item.category._id : item.category, tags: item.tags.map((t: { _id: string } | string) => typeof t === "object" ? t._id : t), order: item.order };
+          if (item._id === itemId) return { ...raw, title: data.title, description: data.description, tags: data.tags };
+          return raw;
+        });
+        const res = await fetch(`/api/todo-presets/${presetId}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: updatedItems }),
+        });
+        if (!res.ok) return;
+        await refreshDays();
+      } catch {}
+      return;
+    }
     try {
       const res = await fetch(`/api/todos/${todoId}`, {
         method: "PUT",
@@ -267,6 +421,43 @@ export default function TodayPage() {
 
   // ===== Delete Todo =====
   const handleDeleteTodo = async (todoId: string) => {
+    const isVirtual = todoId.startsWith("tmpl_");
+    if (isVirtual) {
+      // Virtual ID format: tmpl_{presetId}_{itemId}_{dateStr}
+      const parts = todoId.split("_");
+      const presetId = parts[1];
+      const itemId = parts[2];
+      try {
+        // Fetch preset, remove the matching item
+        const presetRes = await fetch(`/api/todo-presets`);
+        if (!presetRes.ok) return;
+        const presetData = await presetRes.json();
+        const preset = presetData.success && presetData.data.find((p: { _id: string }) => p._id === presetId);
+        if (!preset) return;
+
+        const updatedItems = preset.items
+          .filter((item: { _id: string }) => item._id !== itemId)
+          .map((item: { title: string; description: string; category: { _id: string } | string; tags: ({ _id: string } | string)[]; order: number }) => ({
+            title: item.title, description: item.description,
+            category: typeof item.category === "object" ? item.category._id : item.category,
+            tags: item.tags.map((t: { _id: string } | string) => typeof t === "object" ? t._id : t),
+            order: item.order,
+          }));
+
+        if (updatedItems.length === 0) {
+          // Delete the whole preset if no items left
+          await fetch(`/api/todo-presets/${presetId}`, { method: "DELETE" });
+        } else {
+          const res = await fetch(`/api/todo-presets/${presetId}`, {
+            method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ items: updatedItems }),
+          });
+          if (!res.ok) return;
+        }
+        await refreshDays();
+      } catch {}
+      return;
+    }
     try {
       const res = await fetch(`/api/todos/${todoId}`, { method: "DELETE" });
       if (!res.ok) return;
@@ -278,18 +469,33 @@ export default function TodayPage() {
 
   // ===== Save Timetable =====
   const handleSaveTimetable = async (
-    date: string, dayOfWeek: number,
+    date: string, _dayOfWeek: number,
     slots: { startTime: string; endTime: string; title: string; description: string }[],
-    scope: string, weekdays: number[]
+    scope: string, weekdays: number[], presetId?: string
   ) => {
     if (scope === "everyday" || scope === "custom") {
-      // Save as template for each selected weekday
-      for (const wd of weekdays) {
-        const res = await fetch("/api/timetable/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dayOfWeek: wd, slots }) });
-        if (!res.ok) throw new Error("Failed to save template");
+      if (presetId) {
+        // Update existing preset
+        const res = await fetch(`/api/schedule-presets/${presetId}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slots, weekdays }),
+        });
+        if (!res.ok) throw new Error("Failed to update preset");
+      } else {
+        // Create new preset
+        const res = await fetch("/api/schedule-presets", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: `${scope} schedule`, scope, weekdays, slots }),
+        });
+        if (!res.ok) throw new Error("Failed to create preset");
+      }
+      // Refresh presets list
+      const presetsRes = await fetch("/api/schedule-presets");
+      if (presetsRes.ok) {
+        const d = await presetsRes.json();
+        if (d.success) setSchedulePresets(d.data.map((p: Record<string, unknown>) => ({ _id: p._id, name: p.name, scope: p.scope, slots: p.slots })));
       }
     }
-    // Only save override when scope is "today" (not for everyday/custom — template is sufficient)
     if (scope === "today") {
       const res = await fetch("/api/timetable/overrides", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date, slots }) });
       if (!res.ok) throw new Error("Failed to save override");
@@ -396,7 +602,7 @@ export default function TodayPage() {
             onMoveTodo={handleMoveTodo}
             onAddTodo={(categoryId) => {
               const cat = day.categories.find((c) => c._id === categoryId);
-              setAddModal({ categoryId, categoryName: cat?.name || "", date: day.date });
+              setAddModal({ categoryId, categoryName: cat?.name || "", date: day.date, dayOfWeek: day.dayOfWeek });
             }}
             onEditTodo={(todo) => {
               const cat = day.categories.find((c) => c._id === todo.category._id);
@@ -420,7 +626,7 @@ export default function TodayPage() {
       )}
 
       {addModal && (
-        <AddTodoModal categoryId={addModal.categoryId} categoryName={addModal.categoryName} date={addModal.date} onClose={() => setAddModal(null)} onAdd={handleAddTodo} />
+        <AddTodoModal categoryId={addModal.categoryId} categoryName={addModal.categoryName} date={addModal.date} dayOfWeek={addModal.dayOfWeek} onClose={() => setAddModal(null)} onAdd={handleAddTodo} />
       )}
 
       {editModal && (
@@ -438,7 +644,8 @@ export default function TodayPage() {
         <TimetableEditor
           date={timetableEditor.date} dayOfWeek={timetableEditor.dayOfWeek}
           existingSlots={timetableEditor.slots.map((s) => ({ startTime: s.startTime, endTime: s.endTime, title: s.title, description: s.description }))}
-          onSave={async (slots, scope, weekdays) => { await handleSaveTimetable(timetableEditor.date, timetableEditor.dayOfWeek, slots, scope, weekdays); }}
+          presets={schedulePresets}
+          onSave={async (slots, scope, weekdays, presetId) => { await handleSaveTimetable(timetableEditor.date, timetableEditor.dayOfWeek, slots, scope, weekdays, presetId); }}
           onClose={() => setTimetableEditor(null)}
         />
       )}

@@ -17,6 +17,7 @@ export interface ITimetableTemplate extends Document {
   userId: Types.ObjectId;
   dayOfWeek: number; // 0=Sun, 1=Mon ... 6=Sat
   slots: ITimeSlot[];
+  effectiveFrom: Date; // only apply on/after this date
   createdAt: Date;
   updatedAt: Date;
 }
@@ -43,6 +44,7 @@ const TimetableTemplateSchema = new Schema<ITimetableTemplate>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     dayOfWeek: { type: Number, required: true, min: 0, max: 6 },
     slots: [TimeSlotSchema],
+    effectiveFrom: { type: Date, default: () => { const d = new Date(); d.setUTCHours(0, 0, 0, 0); return d; } },
   },
   { timestamps: true }
 );

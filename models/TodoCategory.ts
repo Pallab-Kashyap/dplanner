@@ -9,6 +9,7 @@ export interface ITodoCategory extends Document {
   scope: "permanent" | "everyday" | "weekly" | "date";
   weekdays: number[]; // [0-6] for weekly scope
   specificDate: Date | null; // for date scope
+  effectiveFrom: Date; // only apply on/after this date
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +28,7 @@ const TodoCategorySchema = new Schema<ITodoCategory>(
     },
     weekdays: { type: [Number], default: [] },
     specificDate: { type: Date, default: null },
+    effectiveFrom: { type: Date, default: () => { const d = new Date(); d.setUTCHours(0, 0, 0, 0); return d; } },
   },
   { timestamps: true }
 );

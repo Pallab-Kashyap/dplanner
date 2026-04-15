@@ -18,6 +18,8 @@ interface TodoItem {
   tags: Tag[];
   category: { _id: string; name: string; color: string };
   order: number;
+  templateId?: string;
+  _template?: boolean;
 }
 
 interface Category {
@@ -116,6 +118,9 @@ export default function KanbanBoard({
                     onClick={() => onEditTodo?.(todo)}
                   >
                     {todo.title}
+                    {(todo._template || todo.templateId) && (
+                      <span title="Recurring task" style={{ marginLeft: "0.3rem", fontSize: "0.75rem", opacity: 0.6 }}>🔁</span>
+                    )}
                   </span>
                   {onEditTodo && (
                     <button

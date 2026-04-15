@@ -464,6 +464,104 @@ a:hover {
   color: #3D3229;
 }
 
+/* ===== NAV DROPDOWN ===== */
+.nav-dropdown-wrapper {
+  position: relative;
+}
+
+.nav-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.nav-dropdown-arrow {
+  font-size: 0.6rem;
+  opacity: 0.6;
+}
+
+.nav-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 0.3rem);
+  left: 0;
+  min-width: 180px;
+  background: var(--bg-card);
+  border: 3px solid var(--border-sketch);
+  border-radius: 12px;
+  padding: 0.4rem;
+  box-shadow: 0 4px 16px var(--shadow);
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.nav-dropdown-item {
+  display: block;
+  padding: 0.4rem 0.8rem;
+  font-family: var(--font-hand);
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.nav-dropdown-item:hover {
+  background: var(--accent-light);
+}
+
+.nav-dropdown-item.active {
+  background: var(--accent);
+  color: #3D3229;
+}
+
+/* Hide mobile links on desktop, show dropdown */
+.nav-mobile-links {
+  display: none;
+}
+
+/* ===== PLANNER PAGE ===== */
+.planner-page {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
+.planner-tabs {
+  display: flex;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+  border-bottom: 2px solid var(--border-sketch);
+  padding-bottom: 0.5rem;
+}
+
+.planner-tab {
+  flex: 1;
+  padding: 0.5rem 0.6rem;
+  font-family: var(--font-hand);
+  font-size: 1.1rem;
+  font-weight: 600;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.15s ease;
+}
+
+.planner-tab:hover {
+  background: var(--accent-light);
+  color: var(--text);
+}
+
+.planner-tab-active {
+  background: var(--accent);
+  color: #3D3229;
+  border-color: var(--border-sketch);
+}
+
 /* ===== DAY SECTION ===== */
 .day-section {
   margin-bottom: 2rem;
@@ -715,6 +813,27 @@ a:hover {
 
   .nav-links.nav-open {
     display: flex;
+  }
+
+  .planner-page {
+    padding: 1rem 0.5rem;
+  }
+
+  /* On mobile: hide desktop dropdown, show plain links */
+  .nav-dropdown-wrapper {
+    display: none;
+  }
+
+  .nav-mobile-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    width: 100%;
+  }
+
+  .nav-mobile-links .nav-link {
+    width: 100%;
+    text-align: left;
   }
 
   /* -- Layout / Container -- */

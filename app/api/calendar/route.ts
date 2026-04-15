@@ -4,7 +4,8 @@ import dbConnect from "@/lib/db";
 import DailyLog from "@/models/DailyLog";
 import Todo from "@/models/Todo";
 import TimetableOverride from "@/models/TimetableOverride";
-import TimetableTemplate from "@/models/TimetableTemplate";
+import SchedulePreset from "@/models/SchedulePreset";
+import UserSettings from "@/models/UserSettings";
 import { successResponse, errorResponse } from "@/lib/apiResponse";
 import { getAuthenticatedUserId, isErrorResponse } from "@/lib/authGuard";
 
@@ -26,17 +27,21 @@ export async function GET(req: NextRequest) {
     const startDate = new Date(Date.UTC(year, month - 1, 1));
     const endDate = new Date(Date.UTC(year, month, 1));
 
-    // Batch: fetch ALL data for the month in 4 parallel queries
-    const [logs, todos, overrides, templates] = await Promise.all([
+    // Batch: fetch ALL data for the month in 5 parallel queries
+    const [logs, todos, overrides, schedulePresets, userSettings] = await Promise.all([
       DailyLog.find({ userId, date: { $gte: startDate, $lt: endDate } }).lean(),
       Todo.find({ userId, date: { $gte: startDate, $lt: endDate } }).lean(),
       TimetableOverride.find({ userId, date: { $gte: startDate, $lt: endDate } }).lean(),
-      TimetableTemplate.find({ userId }).lean(),
+      SchedulePreset.find({ userId, isActive: true }).lean(),
+      UserSettings.findOne({ userId }).lean(),
     ]);
+
+    const schedulePriority = userSettings?.schedulePriority || "custom";
+    const activeCustomSchedule = schedulePresets.find((p: any) => p.scope === "custom");
+    const activeEverydaySchedule = schedulePresets.find((p: any) => p.scope === "everyday");
 
     // Build lookup maps
     const logMap = new Map(logs.map((l: any) => [l.date.toISOString().split("T")[0], l]));
-    const templateMap = new Map(templates.map((t: any) => [t.dayOfWeek, t]));
 
     // Group todos and overrides by date string
     const todosByDate = new Map<string, any[]>();
@@ -76,8 +81,15 @@ export async function GET(req: NextRequest) {
         if (override) {
           slotStatuses = (override.slots || []).map((s: any) => s.status);
         } else {
-          const template = templateMap.get(dateObj.getUTCDay());
-          if (template) slotStatuses = ((template as any).slots || []).map((s: any) => s.status);
+          // Resolve from active schedule presets with priority
+          const dayOfWeek = dateObj.getUTCDay();
+          const customApplies = activeCustomSchedule && activeCustomSchedule.weekdays.includes(dayOfWeek) && dateObj >= new Date(activeCustomSchedule.effectiveFrom);
+          const everydayApplies = activeEverydaySchedule && dateObj >= new Date(activeEverydaySchedule.effectiveFrom);
+          let chosen: any = null;
+          if (customApplies && everydayApplies) chosen = schedulePriority === "custom" ? activeCustomSchedule : activeEverydaySchedule;
+          else if (customApplies) chosen = activeCustomSchedule;
+          else if (everydayApplies) chosen = activeEverydaySchedule;
+          if (chosen) slotStatuses = (chosen.slots || []).map((s: any) => s.status);
         }
 
         const allStatuses = [...dayTodos.map((t: any) => t.status), ...slotStatuses];

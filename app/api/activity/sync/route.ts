@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import dbConnect from "@/lib/db";
 import Todo from "@/models/Todo";
 import TimetableOverride from "@/models/TimetableOverride";
-import TimetableTemplate from "@/models/TimetableTemplate";
+import SchedulePreset from "@/models/SchedulePreset";
+import UserSettings from "@/models/UserSettings";
 import DailyLog from "@/models/DailyLog";
 import { successResponse, errorResponse } from "@/lib/apiResponse";
 import { getAuthenticatedUserId, isErrorResponse } from "@/lib/authGuard";
@@ -30,8 +31,17 @@ export async function POST(req: NextRequest) {
     if (override) {
       timetableSlots = override.slots;
     } else {
-      const template = await TimetableTemplate.findOne({ userId, dayOfWeek: date.getUTCDay() });
-      if (template) timetableSlots = template.slots;
+      // Resolve from active schedule presets with priority
+      const [presets, settings] = await Promise.all([
+        SchedulePreset.find({ userId, isActive: true }).lean(),
+        UserSettings.findOne({ userId }).lean(),
+      ]);
+      const priority = settings?.schedulePriority || "custom";
+      const dayOfWeek = date.getUTCDay();
+      const customPreset = presets.find((p) => p.scope === "custom" && p.weekdays.includes(dayOfWeek) && date >= new Date(p.effectiveFrom));
+      const everydayPreset = presets.find((p) => p.scope === "everyday" && date >= new Date(p.effectiveFrom));
+      const chosen = customPreset && everydayPreset ? (priority === "custom" ? customPreset : everydayPreset) : (customPreset || everydayPreset);
+      if (chosen) timetableSlots = chosen.slots;
     }
 
     const allStatuses = [

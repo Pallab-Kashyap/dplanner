@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   try {
     await dbConnect();
     const body = await req.json();
-    const { title, description, category, status, statusNote, tags, date, order } = body;
+    const { title, description, category, status, statusNote, tags, date, order, templateId } = body;
 
     if (!title) return errorResponse("Title is required");
     if (!category) return errorResponse("Category is required");
@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
       status,
       statusNote,
       tags: tags || [],
+      templateId: templateId || null,
       date: new Date(date + "T00:00:00.000Z"),
       order: assignedOrder,
     });

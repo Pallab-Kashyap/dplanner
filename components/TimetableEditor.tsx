@@ -9,13 +9,21 @@ interface TimeSlotInput {
   description: string;
 }
 
+interface SchedulePresetOption {
+  _id: string;
+  name: string;
+  scope: "everyday" | "custom";
+  slots: TimeSlotInput[];
+}
+
 type ScheduleScope = "today" | "everyday" | "custom";
 
 interface TimetableEditorProps {
   date: string;
   dayOfWeek: number;
   existingSlots: TimeSlotInput[];
-  onSave: (slots: TimeSlotInput[], scope: ScheduleScope, weekdays: number[]) => Promise<void>;
+  presets?: SchedulePresetOption[];
+  onSave: (slots: TimeSlotInput[], scope: ScheduleScope, weekdays: number[], presetId?: string) => Promise<void>;
   onClose: () => void;
 }
 
@@ -26,6 +34,7 @@ export default function TimetableEditor({
   date,
   dayOfWeek,
   existingSlots,
+  presets = [],
   onSave,
   onClose,
 }: TimetableEditorProps) {
@@ -36,8 +45,17 @@ export default function TimetableEditor({
   );
   const [scope, setScope] = useState<ScheduleScope>("today");
   const [selectedDays, setSelectedDays] = useState<number[]>([dayOfWeek]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const selectPreset = (presetId: string) => {
+    setSelectedPresetId(presetId);
+    const preset = presets.find((p) => p._id === presetId);
+    if (preset) {
+      setSlots(preset.slots.map((s) => ({ startTime: s.startTime, endTime: s.endTime, title: s.title, description: s.description })));
+    }
+  };
 
   const addSlot = () => {
     const lastSlot = slots[slots.length - 1];
@@ -45,12 +63,17 @@ export default function TimetableEditor({
     const [h, m] = nextStart.split(":").map(Number);
     const nextEnd = `${String(Math.min(h + 1, 23)).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
     setSlots([...slots, { startTime: nextStart, endTime: nextEnd, title: "", description: "" }]);
+    setSelectedPresetId("");
   };
 
-  const removeSlot = (idx: number) => setSlots(slots.filter((_, i) => i !== idx));
+  const removeSlot = (idx: number) => {
+    setSlots(slots.filter((_, i) => i !== idx));
+    setSelectedPresetId("");
+  };
 
   const updateSlot = (idx: number, field: keyof TimeSlotInput, value: string) => {
     setSlots(slots.map((s, i) => (i === idx ? { ...s, [field]: value } : s)));
+    setSelectedPresetId("");
   };
 
   const toggleDay = (day: number) => {
@@ -67,7 +90,7 @@ export default function TimetableEditor({
     setError("");
     try {
       const weekdays = scope === "custom" ? selectedDays : scope === "everyday" ? [0,1,2,3,4,5,6] : [dayOfWeek];
-      await onSave(validSlots, scope, weekdays);
+      await onSave(validSlots, scope, weekdays, selectedPresetId || undefined);
     } catch {
       setError("Failed to save. Please try again.");
       setSaving(false);
@@ -81,6 +104,38 @@ export default function TimetableEditor({
         <p className="text-muted" style={{ marginBottom: "0.8rem", fontSize: "0.95rem" }}>
           {date} · {DAY_NAMES_FULL[dayOfWeek]}
         </p>
+
+        {/* Preset selector */}
+        {presets.length > 0 && (
+          <div style={{ marginBottom: "0.6rem" }}>
+            <p style={{ fontSize: "0.95rem", fontFamily: "var(--font-hand)", fontWeight: 600, marginBottom: "0.3rem" }}>Load from preset:</p>
+            <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
+              {presets.map((preset) => (
+                <button
+                  key={preset._id}
+                  type="button"
+                  onClick={() => selectPreset(preset._id)}
+                  style={{
+                    padding: "0.25rem 0.6rem",
+                    borderRadius: "8px",
+                    border: `2px solid ${selectedPresetId === preset._id ? "var(--border-sketch)" : "var(--border-sketch)"}`,
+                    background: selectedPresetId === preset._id ? "var(--accent)" : "var(--bg)",
+                    color: selectedPresetId === preset._id ? "#3D3229" : "var(--text)",
+                    cursor: "pointer",
+                    fontFamily: "var(--font-hand)",
+                    fontSize: "0.9rem",
+                    fontWeight: 600,
+                  }}
+                >
+                  {preset.name}
+                  <span className="text-muted" style={{ marginLeft: "0.3rem", fontSize: "0.75rem" }}>
+                    ({preset.scope})
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           {slots.map((slot, idx) => (
@@ -118,7 +173,7 @@ export default function TimetableEditor({
               {(["today", "everyday", "custom"] as ScheduleScope[]).map((s) => (
                 <label key={s} style={{ display: "flex", alignItems: "center", gap: "0.25rem", cursor: "pointer", fontSize: "0.95rem" }}>
                   <input type="radio" name="scope" checked={scope === s} onChange={() => setScope(s)} disabled={saving} />
-                  <span>{s === "today" ? "Just today" : s === "everyday" ? "Everyday" : "Custom"}</span>
+                  <span>{s === "today" ? "Just today" : s === "everyday" ? "Save as everyday preset" : "Save as custom preset"}</span>
                 </label>
               ))}
             </div>

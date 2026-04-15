@@ -1,9 +1,13 @@
 import { NextRequest } from "next/server";
 import dbConnect from "@/lib/db";
-import TimetableTemplate from "@/models/TimetableTemplate";
+import SchedulePreset from "@/models/SchedulePreset";
 import TimetableOverride from "@/models/TimetableOverride";
+import UserSettings from "@/models/UserSettings";
+import Tag from "@/models/Tag";
 import { successResponse, errorResponse } from "@/lib/apiResponse";
 import { getAuthenticatedUserId, isErrorResponse } from "@/lib/authGuard";
+
+void Tag;
 
 // GET /api/timetable/resolve?date=YYYY-MM-DD
 export async function GET(req: NextRequest) {
@@ -37,15 +41,34 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    const template = await TimetableTemplate.findOne({ userId, dayOfWeek }).populate("slots.tags");
+    const [presets, settings] = await Promise.all([
+      SchedulePreset.find({ userId, isActive: true }).populate("slots.tags").lean(),
+      UserSettings.findOne({ userId }).lean(),
+    ]);
 
-    if (template) {
+    const priority = settings?.schedulePriority || "custom";
+    const customPreset = presets.find((p) => p.scope === "custom" && p.weekdays.includes(dayOfWeek));
+    const everydayPreset = presets.find((p) => p.scope === "everyday");
+
+    const customApplies = customPreset && date >= new Date(customPreset.effectiveFrom);
+    const everydayApplies = everydayPreset && date >= new Date(everydayPreset.effectiveFrom);
+
+    let resolvedPreset = null;
+    if (customApplies && everydayApplies) {
+      resolvedPreset = priority === "custom" ? customPreset : everydayPreset;
+    } else if (customApplies) {
+      resolvedPreset = customPreset;
+    } else if (everydayApplies) {
+      resolvedPreset = everydayPreset;
+    }
+
+    if (resolvedPreset) {
       return successResponse({
-        source: "template",
+        source: "preset",
         date: dateStr,
         dayOfWeek,
-        slots: template.slots,
-        templateId: template._id,
+        slots: resolvedPreset.slots,
+        presetId: resolvedPreset._id,
       });
     }
 
